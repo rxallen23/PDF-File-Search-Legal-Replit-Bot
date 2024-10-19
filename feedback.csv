@@ -1,0 +1,8 @@
+question,response,feedback
+Hello,Hello! How can I assist you today?,helpful
+Hello,Hello! How can I assist you today?,not-helpful
+hello,Hello! How can I assist you today?,not-helpful
+hello,Hello! How can I assist you today?,helpful
+what are you able to help with?,"I can assist with providing information and guidance on legal topics, including limited legal services programs, the nature of lawyer-client relationships, and ethical considerations for lawyers in various situations. If you have specific questions about legal advice, representation, or related matters, feel free to ask!",helpful
+are you able to test me?,"Yes, I can assist you with testing your knowledge or understanding of a specific topic. Please let me know what you would like to be tested on.",helpful
+professional responsibility,"Professional responsibility encompasses the ethical obligations and standards that lawyers must adhere to in their practice. This includes acting competently, which requires the necessary legal knowledge, skill, thoroughness, and preparation for effective client representation. Additionally, lawyers have a duty to ensure that they maintain ethical standards within their organizations, which may involve providing resources for continuing legal education and establishing channels for junior lawyers to seek guidance on ethical issues. Furthermore, lawyers can be held accountable for the misconduct of others if they have supervisory responsibilities or if they are aware of and fail to address such misconduct appropriately.",helpful

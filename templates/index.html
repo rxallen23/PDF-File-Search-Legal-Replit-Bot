@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot</title>
+    <style>
+        /* Basic Reset */
+        * {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f2f5;
+        }
+
+        /* Chat Container */
+        #chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Chat Messages */
+        #chat-messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Individual Messages */
+        .message {
+            max-width: 70%;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 20px;
+            line-height: 1.4;
+            position: relative;
+        }
+
+        .user-message {
+            align-self: flex-end;
+            background-color: #007bff;
+            color: white;
+            text-align: right;
+        }
+
+        .bot-message {
+            align-self: flex-start;
+            background-color: #e9ecef;
+            color: #333;
+        }
+
+        /* Feedback Buttons */
+        .feedback {
+            margin-top: 5px;
+            font-size: 14px;
+        }
+
+        .feedback button {
+            margin-right: 10px;
+            padding: 5px 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .feedback .helpful {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .feedback .not-helpful {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        /* Input Area */
+        #input-area {
+            display: flex;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+
+        #user-message {
+            flex-grow: 1;
+            padding: 10px 20px;
+            border: 1px solid #ced4da;
+            border-radius: 30px;
+            font-size: 16px;
+            background-color: white;
+            color: #333;
+            outline: none;
+        }
+
+        #send-button {
+            width: 40px;
+            height: 40px;
+            margin-left: 10px;
+            border: none;
+            border-radius: 50%;
+            background-color: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        #send-button svg {
+            stroke: #333;
+        }
+
+        /* Thinking Dots Animation */
+        .loading-dots {
+            display: inline-block;
+            align-self: flex-start;
+            background-color: #e9ecef;
+            padding: 10px 15px;
+            border-radius: 20px;
+            margin-bottom: 15px;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #333;
+            margin-right: 3px;
+            animation: pulse 1.5s infinite;
+        }
+
+        .dot:nth-child(2) {
+            animation-delay: 0.3s;
+        }
+
+        .dot:nth-child(3) {
+            animation-delay: 0.6s;
+            margin-right: 0;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* Download and Share Buttons */
+        #download-area {
+            padding: 10px;
+            text-align: center;
+        }
+
+        #download-area button {
+            margin: 5px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+
+        #share-link {
+            display: none;
+            text-align: center;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-messages"></div>
+        <div id="input-area">
+            <input type="text" id="user-message" placeholder="Type your message here" onkeydown="checkEnter(event)">
+            <button id="send-button" onclick="sendMessage()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5"></line>
+                    <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+            </button>
+        </div>
+
+        <!-- New Download and Share Chat Button -->
+        <div id="download-area">
+            <button onclick="downloadChat()">Download Chat</button>
+            <button onclick="shareChat()">Share Chat</button>
+            <p id="share-link"></p>
+        </div>
+    </div>
+
+    <script>
+        let chatHistory = [];
+
+        function checkEnter(event) {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        }
+
+        function sendMessage() {
+            const userMessage = document.getElementById('user-message').value;
+            if (!userMessage.trim()) return;
+
+            const chatMessages = document.getElementById('chat-messages');
+            const userMessageElement = document.createElement('div');
+            userMessageElement.textContent = userMessage;
+            userMessageElement.classList.add('message', 'user-message');
+            chatMessages.appendChild(userMessageElement);
+            chatHistory.push({ role: 'user', message: userMessage });
+
+            document.getElementById('user-message').value = '';
+
+            const loadingDots = document.createElement('div');
+            loadingDots.classList.add('loading-dots');
+            loadingDots.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+            chatMessages.appendChild(loadingDots);
+
+            fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: userMessage })
+            })
+            .then(response => response.json())
+            .then(data => {
+                loadingDots.remove();
+
+                const botMessageElement = document.createElement('div');
+                botMessageElement.textContent = data.response;
+                botMessageElement.classList.add('message', 'bot-message');
+                chatMessages.appendChild(botMessageElement);
+                chatHistory.push({ role: 'bot', message: data.response });
+
+                const feedbackDiv = document.createElement('div');
+                feedbackDiv.classList.add('feedback');
+                feedbackDiv.innerHTML = `
+                    <span>Was this helpful?</span>
+                    <button onclick="sendFeedback('${userMessage}', '${data.response}', 'helpful')">Yes</button>
+                    <button onclick="sendFeedback('${userMessage}', '${data.response}', 'not-helpful')">No</button>`;
+                chatMessages.appendChild(feedbackDiv);
+            });
+        }
+
+        function sendFeedback(question, response, feedback) {
+            fetch('/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question, response, feedback })
+            })
+            .then(() => alert("Thank you for your feedback!"));
+        }
+
+        function downloadChat() {
+            const chatText = chatHistory.map(entry => `${entry.role}: ${entry.message}`).join('\n\n');
+            const blob = new Blob([chatText], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'chat-log.txt';
+            link.click();
+        }
+
+        function shareChat() {
+            fetch('/share', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatHistory })
+            })
+            .then(response => response.json())
+            .then(data => {
+                const shareLink = document.getElementById('share-link');
+                shareLink.style.display = 'block';
+                shareLink.textContent = `Shareable Link: ${window.location.origin}${data.shareable_link}`;
+            });
+        }
+    </script>
+</body>
+</html>
