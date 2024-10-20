@@ -1,139 +1,192 @@
-from flask import Flask, render_template, request, jsonify
-from embedchain import App
 import os
-from replit import db
-import csv
-import re
+from dotenv import load_dotenv
+from flask import Flask, render_template, request, jsonify
+from langchain.text_splitter import CharacterTextSplitter
+from openai import OpenAI
+from pdfminer.high_level import extract_text
 
-# Initialize the Flask app and the embedchain chatbot
+# Load environment variables (OpenAI API key)
+load_dotenv()
+key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=key)
+
+# Initialize the Flask app
 app = Flask(__name__)
-chatApp = App()
 
-# Add description and instructions for handling messages
-instructions = """
-Primary Function:  
-   You are a legal assistant that answers ethical questions based on the ABA Model Rules of Professional Responsibility, related caselaw, and uploaded materials.
-
-Scope of Responses:  
-   You should respond to questions about legal ethics, compile relevant information from documents, summarize it, and cite specific rules, statutes, or caselaw.
-
-Handling Conversations:  
-   Start with a friendly greeting, ask how you can assist, and invite users to ask about legal ethics. If they ask off-topic questions, gently guide them back to the appropriate topic.
+# Assistant description and instructions (personality injected)
+description = """
+    You are a friendly and approachable legal assistant with a sharp knowledge of legal ethics. You aim to make complex legal concepts easy to understand and offer a warm, welcoming experience for users.
 """
 
-# Function to check if the user question is related to legal ethics
-def related_to_ethics(user_question):
-    # Define keywords that indicate the question is about legal ethics
-    ethics_keywords = [
-        "ethics", "professional responsibility", "ABA rules", "conflict of interest",
-        "lawyer duties", "client confidentiality", "ethical responsibilities", "model rule", 
-        "competence", "client representation"
-    ]
-    # Check if the question contains any of these keywords
-    return any(keyword in user_question.lower() for keyword in ethics_keywords)
+instructions = """
+    You are a legal assistant specializing in legal ethics. You're friendly, professional, and approachable. Feel free to use a casual tone with simple language, and sprinkle in a few emojis to keep the conversation light and engaging when appropriate.
 
-# Function to provide a friendly greeting and ask if the user has any legal ethics questions
-def initial_conversation():
-    return "Hello! How can I assist you today? Do you have any questions about legal ethics or professional responsibility?"
+    Respond only to questions related to legal ethics based on the ABA Model Rules and related caselaw. Always provide clear, easy-to-understand answers with a friendly and empathetic tone.
 
-# Function to continue the conversation and guide the user
-def continue_conversation():
-    return "Feel free to ask about any ethical dilemmas legal professionals may face, or the ABA Model Rules. I'm here to help!"
+    Feel free to inject a little bit of humor or encouragement when appropriate. Start conversations with a warm greeting, ask how you can help, and wrap up with a friendly note, inviting the user to ask more if needed.
 
-# Load PDFs into the chat app and log the process
-fileList = os.listdir("docs")
-for filename in fileList:
-    if filename.endswith(".pdf"):
-        keys = db.keys()
-        if filename not in keys:
-            print(f"Loading {filename} into chatApp")
-            chatApp.add("pdf_file", f"docs/{filename}")
-            db[filename] = None  # Track that the file has been loaded
-        else:
-            print(f"{filename} already in db")
+    Remember: You’re professional, but you also want the user to feel comfortable and supported!
+"""
 
-# Function to search the PDFs and compile a summary with citations
-def search_and_summarize(query):
-    print(f"Searching PDFs for query: {query}")
 
-    # Execute the query and capture the response tuple
+# Create OpenAI assistant
+assistant = client.beta.assistants.create(
+    name="Legal Ethics Assistant",
+    description=description,
+    instructions=instructions,
+    model="gpt-4-turbo-preview",  # Use this model for GPT-4 variant
+    tools=[{
+        "type": "file_search"
+    }],
+)
+
+# Debugging: Confirm assistant creation
+print(f"Assistant created with ID: {assistant.id}")
+
+# Function to extract text from a PDF using pdfminer
+def extract_text_from_pdf(pdf_file):
     try:
-        response_tuple = chatApp.query(query)
-        response = response_tuple[0]  # Assuming the first element contains the answer
-
-        # Log the entire response for debugging
-        print(f"Raw response from embedchain: {response}")
-
-        if not response:
-            return "No relevant information found."
-
-        # Extract citations and summarize the content
-        citations = extract_citations(response)
-        summary = summarize_response(response)
-
-        # Return the combined summary and citations
-        return f"Summary: {summary}\n\nCitations: {citations}"
-
+        return extract_text(pdf_file)
     except Exception as e:
-        print(f"Error while searching PDFs: {str(e)}")
-        return f"Error while searching documents: {str(e)}"
+        print(f"Error extracting text from {pdf_file}: {str(e)}")
+        return ""
 
-# Function to extract citations (rules, statutes, caselaw) from the chatbot's response
-def extract_citations(response):
-    # Example logic to search for patterns of legal citations, e.g., "Model Rule 1.1" or case references
-    citation_matches = re.findall(r'Model Rule \d+\.\d+|[A-Z][a-z]+ v\. [A-Z][a-z]+', response)
-    return ', '.join(citation_matches) if citation_matches else "No specific citations found."
+# Process PDF files in the 'docs' directory and extract their text
+def process_pdfs_in_directory(directory_path):
+    if not os.path.isdir(directory_path):
+        print(f"Directory {directory_path} does not exist.")
+        return {}
 
-# Function to summarize the content of the response
-def summarize_response(response):
-    # Simple logic to generate a summary (this can be made more sophisticated)
-    sentences = response.split('. ')
-    summary = '. '.join(sentences[:3])  # Grab the first few sentences for summary
-    return summary if summary else "No summary available."
+    pdf_files = [f for f in os.listdir(directory_path) if f.endswith('.pdf')]
+    if not pdf_files:
+        print(f"No PDFs found in the directory {directory_path}.")
+        return {}
 
-# Route for the chatbot page (HTML interface)
+    pdf_texts = {}
+    for pdf_file in pdf_files:
+        full_path = os.path.join(directory_path, pdf_file)
+        print(f"Processing {full_path}")
+        text = extract_text_from_pdf(full_path)
+        if text:
+            pdf_texts[pdf_file] = text
+        else:
+            print(f"Failed to extract text from {pdf_file}")
+
+    return pdf_texts
+
+# Create vector store for legal documents
+vector_store = client.beta.vector_stores.create(name="Legal Ethics Documents")
+print(f"Vector store ID: {vector_store.id}")
+
+# Assuming your PDF files are located in a folder named 'docs'
+file_paths = [os.path.join("docs", filename) for filename in os.listdir("docs") if filename.endswith(".pdf")]
+
+if not file_paths:
+    print("No PDF files found.")
+else:
+    # Upload Policy Files into Vector Store
+    file_streams = [open(path, "rb") for path in file_paths]
+    file_batch = client.beta.vector_stores.file_batches.upload_and_poll(
+        vector_store_id=vector_store.id, files=file_streams
+    )
+    # Debugging: Check upload status
+    print(file_batch.status)
+    print(file_batch.file_counts)
+
+# Function to chunk text
+def chunk_text(text, chunk_size=1000, chunk_overlap=200):
+    text_splitter = CharacterTextSplitter(
+        separator=" ", 
+        chunk_size=chunk_size, 
+        chunk_overlap=chunk_overlap
+    )
+    chunks = text_splitter.split_text(text)
+    return chunks
+
+# Add chunks to the vector store
+def add_chunks_to_vector_store(chunks, vector_store_id):
+    for i, chunk in enumerate(chunks):
+        document_id = f"chunk_{i}"
+        client.beta.vector_stores.documents.add(
+            vector_store_id=vector_store_id,
+            documents=[{"text": chunk, "document_id": document_id}]
+        )
+    print(f"Added {len(chunks)} chunks to the vector store")
+
+# Function to process citations (to extract citations from the assistant's response)
+def process_citations(message_content):
+    citations = []
+    if hasattr(message_content, 'annotations'):
+        for index, annotation in enumerate(message_content.annotations):
+            if file_citation := getattr(annotation, "file_citation", None):
+                cited_file = client.files.retrieve(file_citation.file_id)
+                citation_text = f"[{index + 1}: {cited_file.filename}]"
+                message_content.value = message_content.value.replace(
+                    annotation.text, citation_text)
+                citations.append(f"{citation_text} {cited_file.filename}")
+    return message_content.value, citations
+
+# Flask Route: Homepage
 @app.route('/')
 def index():
     return render_template('index.html')
 
-# Route to handle chatbot queries
+# Flask Route: Handle chatbot queries
 @app.route('/chat', methods=['POST'])
 def chat():
-    data = request.json
-    user_message = data.get('message')
+    user_message = request.json.get('message')
 
-    try:
-        # If the user says 'hello' or starts a conversation, greet them
-        if re.search(r'\bhello\b|\bhi\b|\bhey\b', user_message.lower()):
-            response_message = initial_conversation()
+    # Create a thread with the user's message
+    thread = client.beta.threads.create(messages=[{
+        "role": "user",
+        "content": user_message,
+    }])
 
-        # If the message is related to legal ethics, provide the relevant response
-        elif related_to_ethics(user_message):
-            # Search the PDFs, summarize, and provide citations based on the user's query
-            response_message = search_and_summarize(user_message)
+    # Run the assistant and get the response
+    run = client.beta.threads.runs.create_and_poll(
+        thread_id=thread.id,
+        assistant_id=assistant.id
+    )
 
-        # If no specific legal ethics keywords are found, guide the user back to relevant topics
-        else:
-            response_message = continue_conversation()
+    # Retrieve the assistant's response
+    messages = list(client.beta.threads.messages.list(thread_id=thread.id, run_id=run.id))
+    message_content = messages[0].content[0].text
 
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
-        response_message = f"Error occurred: {str(e)}"
+    # Process citations if necessary
+    assistant_response, citations = process_citations(message_content)
 
-    return jsonify({'response': response_message})
+    # Initial greeting function with personality
+    def initial_conversation():
+        return "Hey there! I'm your friendly legal assistant here to help with any legal ethics questions. How can I assist you today?"
+    
+    # Follow-up question to engage the user further
+    follow_up = "Was that helpful? Is there anything else you'd like to know about legal ethics or professional responsibility?"
+    
+    # Injecting some friendly closing remarks
+    closing_note = "If you have any more questions, don't hesitate to ask! I'm here to help 😊"
 
-# Route to handle feedback
+    # Friendly response with an emoji
+    closing_note = "If you need more info, just ask! 😊"
+
+    return jsonify({'response': assistant_response, 'citations': citations})
+
+# Flask Route: Test function to see if PDF content is being searched
+@app.route('/test_pdf_query')
+def test_pdf_query():
+    query = "client confidentiality"  # Adjust this to a query you expect to find in the PDFs
+    response = search_and_summarize(query)
+    return response
+
+# Flask Route: Handle feedback (Optional)
 @app.route('/feedback', methods=['POST'])
 def feedback():
     data = request.json
-    question = data.get('question')       # The original user question
-    response = data.get('response')       # The bot's response
-    feedback = data.get('feedback')       # 'helpful' or 'not-helpful'
+    question = data.get('question')
+    response = data.get('response')
+    feedback = data.get('feedback')
 
-    # Log the feedback to the console
     print(f"Feedback received for question: '{question}', Response: '{response}', Feedback: '{feedback}'")
 
-    # Save feedback to a CSV file
     feedback_file = 'feedback.csv'
     file_exists = os.path.isfile(feedback_file)
 
@@ -141,14 +194,13 @@ def feedback():
         fieldnames = ['question', 'response', 'feedback']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-        # Write header if file does not exist
         if not file_exists:
             writer.writeheader()
 
-        # Write feedback row
         writer.writerow({'question': question, 'response': response, 'feedback': feedback})
 
     return jsonify({'message': 'Feedback received'})
 
+# Run the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
