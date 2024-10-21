@@ -1,7 +1,11 @@
 import os
+import hashlib
+import pickle
+import faiss
+import numpy as np
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, jsonify
-from langchain.text_splitter import CharacterTextSplitter
+from langchain_community.embeddings import OpenAIEmbeddings
 from openai import OpenAI
 from pdfminer.high_level import extract_text
 
@@ -42,6 +46,30 @@ assistant = client.beta.assistants.create(
 
 # Debugging: Confirm assistant creation
 print(f"Assistant created with ID: {assistant.id}")
+
+# Initialize embeddings (using OpenAI API)
+embedding_model = OpenAIEmbeddings()
+
+# Ensure cache directory exists
+cache_dir = "embedding_cache"
+if not os.path.exists(cache_dir):
+    os.makedirs(cache_dir)
+
+# Function to hash a chunk of text for caching
+def hash_text(text):
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+# Function to cache and load embeddings to avoid recomputation
+def cache_embedding(text_chunk):
+    cache_file = f"embedding_cache/{hash_text(text_chunk)}.pkl"
+    if os.path.exists(cache_file):
+        with open(cache_file, 'rb') as f:
+            return pickle.load(f)
+    embedding = embedding_model.embed_documents([text_chunk])[0]
+    with open(cache_file, 'wb') as f:
+        pickle.dump(embedding, f)
+    return embedding
+
 
 # Function to extract text from a PDF using pdfminer
 def extract_text_from_pdf(pdf_file):
@@ -93,25 +121,31 @@ else:
     print(file_batch.status)
     print(file_batch.file_counts)
 
-# Function to chunk text
-def chunk_text(text, chunk_size=1000, chunk_overlap=200):
-    text_splitter = CharacterTextSplitter(
-        separator=" ", 
-        chunk_size=chunk_size, 
-        chunk_overlap=chunk_overlap
-    )
-    chunks = text_splitter.split_text(text)
-    return chunks
+# Chunk text dynamically to avoid processing the entire document at once
+def chunk_text(text, chunk_size=1000):
+    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
 
-# Add chunks to the vector store
-def add_chunks_to_vector_store(chunks, vector_store_id):
-    for i, chunk in enumerate(chunks):
-        document_id = f"chunk_{i}"
-        client.beta.vector_stores.documents.add(
-            vector_store_id=vector_store_id,
-            documents=[{"text": chunk, "document_id": document_id}]
-        )
-    print(f"Added {len(chunks)} chunks to the vector store")
+# Vectorize each chunk using cached embeddings
+def vectorize_text_chunks(text_chunks):
+    embeddings = []
+    for chunk in text_chunks:
+        embedding = cache_embedding(chunk)
+        embeddings.append(embedding)
+    return embeddings
+
+# Create FAISS index for fast retrieval
+def create_faiss_index(embeddings):
+    dimension = len(embeddings[0])
+    index = faiss.IndexFlatL2(dimension)
+    index.add(np.array(embeddings).astype('float32'))
+    return index
+
+# Retrieve relevant chunks using FAISS index
+def retrieve_relevant_chunks(question, index, text_chunks, top_k=5):
+    question_embedding = embedding_model.embed_query(question)
+    distances, indices = index.search(np.array([question_embedding]).astype('float32'), top_k)
+    relevant_chunks = [text_chunks[i] for i in indices[0]]
+    return relevant_chunks
 
 # Function to process citations (to extract citations from the assistant's response)
 def process_citations(message_content):
@@ -126,6 +160,20 @@ def process_citations(message_content):
                 citations.append(f"{citation_text} {cited_file.filename}")
     return message_content.value, citations
 
+# Preprocess and create embeddings for all the PDFs, and create FAISS index
+pdf_texts = process_pdfs_in_directory("docs")  # Process the PDFs
+all_text_chunks = []  # Store all text chunks
+
+# Loop through the text and create chunks
+for pdf_name, pdf_text in pdf_texts.items():
+    chunks = chunk_text(pdf_text)  # Chunk the text
+    all_text_chunks.extend(chunks)  # Add the chunks to the list
+
+# Vectorize the text chunks and create FAISS index
+if all_text_chunks:
+    embeddings = vectorize_text_chunks(all_text_chunks)  # Generate embeddings
+    faiss_index = create_faiss_index(embeddings)  # Create FAISS index for search
+    
 # Flask Route: Homepage
 @app.route('/')
 def index():
@@ -136,6 +184,22 @@ def index():
 def chat():
     user_message = request.json.get('message')
 
+    if not user_message:
+        return jsonify({'response': "Please ask a question related to legal ethics."})
+
+    # Embed user query
+    question_embedding = embedding_model.embed_query(user_message)
+
+    # Retrieve relevant chunks using FAISS index
+    relevant_chunks = retrieve_relevant_chunks(user_message, faiss_index, all_text_chunks, top_k=5)
+
+    if not relevant_chunks:
+        return jsonify({'response': "Sorry, I couldn't find any relevant information."})
+
+
+    # Combine or summarize the relevant chunks
+    assistant_response = " ".join(relevant_chunks)
+    
     # Create a thread with the user's message
     thread = client.beta.threads.create(messages=[{
         "role": "user",
