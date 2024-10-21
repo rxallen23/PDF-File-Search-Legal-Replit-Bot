@@ -9,13 +9,37 @@
         * {
             box-sizing: border-box;
         }
-
         body, html {
             height: 100%;
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
             background-color: #f0f2f5;
+            color: #333;
+        }
+        /* Header Styling */
+        #bot-header {
+            text-align: center;
+            padding: 20px;
+            background-color: #bbdefb; /* Pale Blue background color */
+            color: #007bff; /* Blue text */
+        }
+
+        #bot-header img {
+            width: 80px; /* Set image width */
+            height: 80px; /* Set image height */
+            border-radius: 50%; /* Make the image circular */
+            margin-bottom: 10px; /* Add space below the image */
+        }
+
+        #bot-title {
+            font-size: 24px;
+            font-weight: bold; /* Bold font for the title */
+        }
+
+        #bot-description {
+            font-size: 16px;
+            font-weight: 300; /* Light font for the description */
         }
 
         /* Chat Container */
@@ -185,6 +209,14 @@
     </style>
 </head>
 <body>
+    <!-- Header with Image, Title, and Description -->
+    <div id="bot-header">
+        <img src="static/Legal_Ethics_Eagle_Icon.jpg" alt="Bot Icon">
+        <div id="bot-title">The Legal Eagle </div>
+        <div id="bot-description">I'm a Legal Ethics and Professional Responsibility Bot that provides answers to ethical scenarios or dilemmas that legal professionals may face on a daily basis. My answers are based on the ABA Model Rules of Professional Responsibility, current caselaw, outlines and notes. Ask me anything and I will do my best to help!</div>
+    </div>
+
+    <!-- Chat Interface -->
     <div id="chat-container">
         <div id="chat-messages"></div>
         <div id="input-area">
