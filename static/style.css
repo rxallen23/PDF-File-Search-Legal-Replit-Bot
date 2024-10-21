@@ -1,4 +1,4 @@
-/* Your CSS from earlier goes here */
+/* Reset default styling */
 body, html {
     height: 100%;
     margin: 0;
@@ -7,14 +7,84 @@ body, html {
     background-color: #f0f2f5;
     color: #333;
 }
+
+/* Header Styling */
+#bot-header {
+    text-align: center;
+    padding: 20px;
+    background-color: #87cefa; /* Light Sky Blue */
+    color: white;
+    width: 100%; /* Make sure it takes the full width */
+    box-sizing: border-box;
+}
+
+/* Bot image, title, and description */
+#bot-header img {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    margin-bottom: 10px;
+}
+
+#bot-title {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+#bot-description {
+    font-size: 16px;
+    font-weight: 300;
+}
+
+/* Chat Container */
 #chat-container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: calc(100vh - 140px); /* Ensure space for header */
     max-width: 800px;
     margin: 0 auto;
     background-color: white;
-    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    box-sizing: border-box;
 }
-/* The rest of your CSS here */
 
+/* Chat Messages */
+#chat-messages {
+    flex-grow: 1;
+    overflow-y: auto; /* This allows scrolling only in the chat history */
+    padding: 20px;
+}
+
+/* Input Area */
+#input-area {
+    display: flex;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    position: sticky;
+    bottom: 0; /* Stick the input box to the bottom of the chat container */
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#user-message {
+    flex-grow: 1;
+    padding: 10px 20px;
+    border: 1px solid #ced4da;
+    border-radius: 30px;
+    font-size: 16px;
+    background-color: white;
+}
+
+#send-button {
+    width: 40px;
+    height: 40px;
+    margin-left: 10px;
+    border: none;
+    border-radius: 50%;
+    background-color: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
